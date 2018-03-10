@@ -1,0 +1,34 @@
+Lab setup for Network Automation Webinar
+========================================
+
+Management Host / Ansible Host
+==============================
+Linux in VM
+Linux CentOS Linux release 7.3.1611 (Core)
+Python 2.7.5
+Ansible 2.3.1, including Cisco ACI modules
+
+Network Device
+==============
+Cisco ACI Fabric (SW Version 3.0.1(k))
+2-Pods, 3 APIC
+2 spines and 2 leafs per Pod
+
+This is a rather small lab, containing only one network device.
+There are 2 main use cases we are working on for network automation:
+- Inventory + logical topology
+- Service provisioning
+
+The inventory/logical topology is used to get an simple overview of configured tenants including VRFs, Bridge Domains (BDs), Application Profiles (APs) and endpoint gropus (EPGs).
+Additionally this can be used to check settings within BDs and EPGs and check for compliance with recommended and standard values.
+
+Service provisioning entails the setup for a new environment for a customer or project.
+The default environment consists of:
+1 Tenant
+n VRFs, usually 1-2, but might be more
+n Bridge Domains, each attached to one of the VRFs
+n Application Profiles
+n Endpoint groups, each attached to one AP and one BD
+1 physical domain that will be attached to every EPG
+n Ports that will be attached to an EPG to connect to external devices, e.g. UCS Chassis, Loadbalancer, Firewall
+

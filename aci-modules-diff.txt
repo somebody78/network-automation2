@@ -1,0 +1,20 @@
+user@host /usr/share/my_modules/aci-ansible/library (master)] $ diff aci_bd.py aci_bd_mymodule.py 
+235c235,237
+<         filter_string = "?rsp-subtree=full&rsp-subtree-class=fvBD,fvRsCtx,fvRsIgmpsn,fvRsBDToNdP,fvRsBdToEpRet"
+---
+>         # user, date, adjust subtree class to include subnets with fvSubnet
+>         # filter_string = "?rsp-subtree=full&rsp-subtree-class=fvBD,fvRsCtx,fvRsIgmpsn,fvRsBDToNdP,fvRsBdToEpRet"
+>         filter_string = "?rsp-subtree=full&rsp-subtree-class=fvBD,fvRsCtx,fvRsIgmpsn,fvRsBDToNdP,fvRsBdToEpRet,fvSubnet"
+
+user@host /usr/share/my_modules/aci-ansible/library (master)] $ diff aci_epg.py aci_epg_mymodule.py 
+169c169,170
+<         filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd&rsp-prop-include=config-only'
+---
+>         # filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd&rsp-prop-include=config-only'
+>         filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd&rsp-subtree-class=fvRsPathAtt&rsp-prop-include=config-only'
+173c174,176
+<         filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd'
+---
+>         # user, date, adjust subtree class to include static ports with fvRsPathAtt, subnets with fvSubnet
+>         # filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd'
+>         filter_string = '?rsp-subtree=children&rsp-subtree-class=fvRsBd,fvRsPathAtt,fvSubnet'

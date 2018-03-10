@@ -1,0 +1,154 @@
+---
+# Playbook to create the logical toplogy of ACI
+#
+
+- name: ACI logical topology
+  hosts: all
+  vars_files:
+    - ~/.vars-aci-credentials.yml
+#    - "{{ varfile }}"
+
+  connection: local
+  gather_facts: no
+
+  vars:
+    data_dir: "/data/ansible/aci-logical-topology/mpdc/data/"
+
+  tasks:
+  #
+  # list of tenants
+  #
+  - name: Get a list of tenants from ACI
+    aci_tenant:
+      state=query
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    no_log: true
+    register: out
+
+  #
+  # Write tenant information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}tenants-output.json
+
+  #
+  # list of VRFs
+  #
+  - name: Get a list of VRFs from ACI
+    aci_vrf:
+      state=query
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    no_log: true
+    register: out
+
+  #
+  # Write VRF information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}vrfs-output.json
+
+  #
+  # list of BDs
+  #
+  - name: Get a list of BDs from ACI, use modified aci_bd_mymodule module to include subnet information
+    aci_bd_mymodule:
+      state=query
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    no_log: true
+    register: out
+
+  #
+  # Write BD information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}bds-output.json
+    
+  #
+  # list of APs
+  #
+  - name: Get a list of APs from ACI
+    aci_ap:
+      state=query
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    no_log: true
+    register: out
+
+  #
+  # Write AP information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}aps-output.json
+
+  #
+  # list of EPGs
+  #
+  - name: Get a list of EPGs from ACI, use modified aci_epg_mymodule module to get a list of static ports
+    aci_epg_mymodule:
+      state=query
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    no_log: true
+    register: out
+
+  #
+  # Write tenant information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}epgs-output.json
+
+  #
+  # list of Provider Contracts
+  #
+  - name: Get a list of Provider Contracts from ACI
+    aci_epg_to_contract:
+      state=query
+      contract_type=provider
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    # no_log: true
+    register: out
+
+  #
+  # Write tenant information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}provider-contracts-output.json
+
+  #
+  # list of Consumer Contracts
+  #
+  - name: Get a list of Consumer Contracts from ACI
+    aci_epg_to_contract:
+      state=query
+      contract_type=consumer
+      hostname="{{ inventory_hostname }}"
+      username="{{ apic_user }}"
+      password="{{ apic_pass }}"
+      use_proxy=no
+      validate_certs=no
+    # no_log: true
+    register: out
+
+  #
+  # Write tenant information to a file for processing later
+  #
+  - copy: content="{{ out.existing }}" dest={{ data_dir }}consumer-contracts-output.json
+
+# This is the end, my friend
+...

@@ -17,8 +17,10 @@ import copy
 import inspect
 from pprint import pprint
 import xlsxwriter
-import time
-import ipaddress
+# import time
+# import ipaddress
+import sys
+import argparse
 
 ######################################
 # Classes
@@ -197,6 +199,8 @@ class MyVrf(MyAciObjects):
         self.name = inputs['name']
         self.desc = inputs['descr']
         self.dn = inputs['dn']
+        self.scope = inputs['scope']
+        self.pcTag = inputs['pcTag']
         self.bds = {}
         # self.aps = []
 
@@ -245,6 +249,8 @@ class MyVrf(MyAciObjects):
         workdict['vrf_name'] = self.name
         workdict['vrf_desc'] = self.desc
         workdict['vrf_dn'] = self.dn
+        workdict['vrf_scope'] = self.scope
+        workdict['vrf_pcTag'] = self.pcTag
         output = []
         #return workdict
         if len(self.getBds()) == 0:
@@ -500,6 +506,8 @@ class MyEpg(MyAciObjects):
         self.dn = inputs['dn']
         self.pcEnfPref = inputs['pcEnfPref']
         self.bdDn = ''
+        self.scope = inputs['scope']
+        self.pcTag = inputs['pcTag']
         self.static_ports = {}
         self.subnets = {}
         self.provContracts = {}
@@ -628,6 +636,8 @@ class MyEpg(MyAciObjects):
         workdict['epg_desc'] = self.desc
         workdict['epg_dn'] = self.dn
         workdict['epg_pcEnfPref'] = self.pcEnfPref
+        workdict['epg_scope'] = self.scope
+        workdict['epg_pcTag'] = self.pcTag
         workdict['epg_bdDn'] = self.bdDn
         workdict['epg_subnets'] = self.getSubnetIps()
         workdict['epg_prov_contracts'] = self.getProvContractNames()
@@ -858,8 +868,8 @@ def create_excel(excel_file, tenants):
 
     # we need to split the VRF-BD tree and the AP-EPG-Ports tree
 
-    headline1 = ['Tenant Name','Tenant Desc','VRF Name','VRF Desc','BD Name','BD Desc','BD Broadcast IP','BD ARP Flood','BD unkMacUcastAct','BD IP Learning','BD unkMcastAct','BD Unicast Routing','BD multiDstPktAct','BD Subnet IPs']
-    headline2 = ['Tenant Name','Tenant Desc','AP Name','AP Desc','EPG Name','EPG Desc','EPG Isolated','EPG Assoc. BD', 'EPG Provider Contracts', 'EPG Consumer Contracts', 'EPG Subnet IPs', 'EPG Static Port', 'EPG Static Port Encap', 'EPG Static Port Primary Encap', 'EPG Static Port Mode']
+    headline1 = ['Tenant Name','Tenant Desc','VRF Name','VRF Desc','VRF Scope','VRF pcTag','BD Name','BD Desc','BD Broadcast IP','BD ARP Flood','BD unkMacUcastAct','BD IP Learning','BD unkMcastAct','BD Unicast Routing','BD multiDstPktAct','BD Subnet IPs']
+    headline2 = ['Tenant Name','Tenant Desc','AP Name','AP Desc','EPG Name','EPG Desc','EPG pcTag','EPG Scope','EPG Isolated','EPG Assoc. BD', 'EPG Provider Contracts', 'EPG Consumer Contracts', 'EPG Subnet IPs', 'EPG Static Port', 'EPG Static Port Encap', 'EPG Static Port Primary Encap', 'EPG Static Port Mode']
     
     # write headline1
     for hl in headline1:
@@ -887,6 +897,10 @@ def create_excel(excel_file, tenants):
             ws1.write(row, col, getValue(uo, 'vrf_name'), loop_format)
             col += 1
             ws1.write(row, col, getValue(uo, 'vrf_desc'), loop_format)
+            col += 1
+            ws1.write(row, col, getValue(uo, 'vrf_scope'), loop_format)
+            col += 1
+            ws1.write(row, col, getValue(uo, 'vrf_pcTag'), loop_format)
             col += 1
             ws1.write(row, col, getValue(uo, 'bd_name'), loop_format)
             col += 1
@@ -950,6 +964,10 @@ def create_excel(excel_file, tenants):
             col += 1
             ws2.write(row, col, getValue(uo, 'epg_desc'), loop_format)
             col += 1
+            ws2.write(row, col, getValue(uo, 'epg_pcTag'), loop_format)
+            col += 1
+            ws2.write(row, col, getValue(uo, 'epg_scope'), loop_format)
+            col += 1
             ws2.write(row, col, getValue(uo, 'epg_pcEnfPref'), loop_format)
             col += 1
             ws2.write(row, col, getValue(uo, 'epg_bdDn'), loop_format)
@@ -979,8 +997,6 @@ def create_excel(excel_file, tenants):
 ######################################
 # Variables
 ######################################
-environment = 'mpdc'
-tstamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 tenants = {}            # dict of tenants
 vrfs = {}               # dict of vrfs
 bds = {}                # dict of bds
@@ -993,44 +1009,32 @@ cons_contracts = {}       # dict of consumer contracts
 uniOutsVrf = {}         # dict of universal output dicts for VRF tree, containing Tenant, VRF, BD
 uniOutsAp = {}          # dict of universal output dicts for AP tree, containg Tenant, AP, EPG, Static Ports
 
-data_dir = "/data/ansible/aci-logical-topology/"+environment+"/data/"
-tenant_file = data_dir + "tenants-output.json"
-vrf_file = data_dir + "vrfs-output.json"
-bd_file = data_dir + "bds-output.json"
-ap_file = data_dir + "aps-output.json"
-epg_file = data_dir + "epgs-output.json"
-prov_contracts_file = data_dir + "provider-contracts-output.json"
-cons_contracts_file = data_dir + "consumer-contracts-output.json"
-static_port_file = data_dir + "static-ports-output.json"
-
-excel_file = data_dir + "aci-logical-topology-"+environment+".xlsx"
-consistency_file = data_dir + "aci-consistency-check-"+environment+".txt"
-json_file = data_dir + "json-"+environment+".txt"
-
-# conditions for logical testing
-# Test static ports attached to an EPG
-# For Acitve/Standby cluster it might be necessary that 2 ports are attached to an EPG to ensure failover functionality.
-# E.g. firewall cluster nodes are attached to leafs in Pod1 and Pod3, respectively. If there is an EPG where only one port is attached, that might be a problem.
-port_groups = {
-    'name-of-portgroup': set([
-        'topology/pod-1/protpaths-2101-2102/pathep-[portgroup-node1]',
-        'topology/pod-3/protpaths-2301-2302/pathep-[portgroup-node2]'
-    ]),
-}
-
-# Sometimes you want that certain EPGs have a consumed contract attached, e.g. TSM clients
-# not sure based on what this should be defined, start with Tenant, AP and contract name
-consumed_contracts = {
-    'db_clients_1': { 
-        'contract': '<contract-dn>',
-        'tenant': '<tenant-dn>',
-        'ap': '<ap-dn>'
-    },
-}
+valid_envs = ['medc','mpdc']
+env = ''
+script_dir = sys.path[0] + "/"
 
 ######################################
 # Main program
 ######################################
+parser = argparse.ArgumentParser()
+parser.add_argument("-e", "--env", type=str, choices=valid_envs, required=True, help="Choose the environment")
+args = parser.parse_args()
+env = args.env
+
+base_dir = script_dir + "../data-logical-topology/output-files/"+env+"/"
+tenant_file = base_dir + "tenants-output.json"
+vrf_file = base_dir + "vrfs-output.json"
+bd_file = base_dir + "bds-output.json"
+ap_file = base_dir + "aps-output.json"
+epg_file = base_dir + "epgs-output.json"
+prov_contracts_file = base_dir + "provider-contracts-output.json"
+cons_contracts_file = base_dir + "consumer-contracts-output.json"
+static_port_file = base_dir + "static-ports-output.json"
+
+excel_file = base_dir + "aci-logical-topology-"+env+".xlsx"
+consistency_file = base_dir + "aci-consistency-check-"+env+".txt"
+json_file = base_dir + "json-"+env+".json"
+
 # read input files
 with open(tenant_file) as tenant_data:
     tenants_raw = json.load(tenant_data)
@@ -1154,98 +1158,9 @@ jf.write(tenants_json)
 jf.close()
 
 print "#########################################################################################################################"
-print "#########################################################################################################################"
-
-fh = open(consistency_file,"w")
-###print "ACI Topology consistency checks ["+tstamp+"]"
-###fh.write("\n\t\tACI Topology Consistency checks ["+environment+"] ["+tstamp+"]\n\n")
-###print "Port groups    #################################"
-###fh.write("Port groups    #################################\n")
-
-#### Check for inconsistent port_groups, loop over EPG
-###for tenant_dn,tenant in tenants.iteritems():
-###    for ap_dn,ap in tenant.getAppProfiles().iteritems():
-###        for epg_dn,epg in ap.getEpgs().iteritems():
-###            epg_portset = epg.getStaticPortsSet()
-###            for pg_name, pg_set in port_groups.iteritems():
-###                # get set of topology info from EPG and loop over ha_ports
-###                diffset = pg_set.difference(epg_portset)
-###                # print "[++ | ++ | ++]"
-###                if (diffset == pg_set ) or (diffset == set([])):
-###                    # print "Tenant | AP | EPG ["+tenant.getName()+" | "+ap.getName()+" | "+epg.getName()+"], Port group ["+pg_name+"] OKAY"
-###                    pass
-###                else:
-###                    print "Tenant | AP | EPG ["+tenant.getName()+" | "+ap.getName()+" | "+epg.getName()+"], Port group ["+pg_name+"]"
-###                    print "Missing ports: ["+";".join(diffset)+"]"
-###                    fh.write("Tenant | AP | EPG ["+tenant.getName()+" | "+ap.getName()+" | "+epg.getName()+"], Port group ["+pg_name+"]\n")
-###                    fh.write("Missing ports: ["+";".join(diffset)+"]\n")
-###print "################################################"
-###fh.write("################################################\n")
-
-###print "Consumed contracts    ##########################"
-###fh.write("Consumed contracts    ##########################\n")
-###
-#### Check for missing consumed contracts
-#### loop over consumed_contract
-#### pdb.set_trace()
-###for cons_cont_key, cons_cont in consumed_contracts.iteritems():
-###    for epg_key, epg in tenants[cons_cont['tenant']].aps[cons_cont['ap']].getEpgs().iteritems():
-###        # print "Checking contract ["+cons_cont['contract']+"] against ["+str(epg.getConsContractsSet())+"]"
-###        if cons_cont['contract'] in epg.getConsContractsSet():
-###            # print "["+cons_cont_key+"], EPG ["+epg.getDn()+"], Consumed contract ["+cons_cont['contract']+"] OKAY"
-###            pass
-###        else:
-###            print "["+cons_cont_key+"], EPG ["+epg.getDn()+"], Consumed contract ["+cons_cont['contract']+"] MISSING"
-###            fh.write("print ["+cons_cont_key+"], EPG ["+epg.getDn()+"], Consumed contract ["+cons_cont['contract']+"] MISSING\n")
-###            
-###print "################################################"
-###fh.write("################################################\n")
-
-# Check for overlapping subnets
-# loop over tenants, bridge domains and subnets, twice. To match each against each.
-###print "Subnet overlaps       ##########################"
-###fh.write("Subnet overlaps       ##########################\n")
-###
-###subnets_consistency = {}
-###for tenant_dn,tenant in tenants.iteritems():
-###    subnets_consistency[tenant.getName()] = {}
-###    for vrf_dn,vrf in tenant.getVrfs().iteritems():
-###        subnets_consistency[tenant.getName()][vrf.getName()] = {}
-###        for bd_dn,bd in vrf.getBds().iteritems():
-###            subnets_consistency[tenant.getName()][vrf.getName()][bd.getName()] = []
-###            for subnet_dn,subnet in bd.getSubnets().iteritems():
-###                subnets_consistency[tenant.getName()][vrf.getName()][bd.getName()].append(subnet.getIp())
-###            if len(subnets_consistency[tenant.getName()][vrf.getName()][bd.getName()]) == 0:
-###                del subnets_consistency[tenant.getName()][vrf.getName()][bd.getName()]
-###        if len(subnets_consistency[tenant.getName()][vrf.getName()]) == 0:
-###            del subnets_consistency[tenant.getName()][vrf.getName()]
-###    if len(subnets_consistency[tenant.getName()]) == 0:
-###        del subnets_consistency[tenant.getName()]
-###
-###subnets_consistency_ref = copy.deepcopy(subnets_consistency)
-###for tenant_ref in subnets_consistency_ref:
-###    for vrf_ref in subnets_consistency_ref[tenant_ref]:
-###        for bd_ref in subnets_consistency_ref[tenant_ref][vrf_ref]:
-###            for bd_chk in subnets_consistency[tenant_ref][vrf_ref]:
-###                if bd_chk == bd_ref:
-###                    pass
-###                else:
-###                    for subnet_ref in subnets_consistency_ref[tenant_ref][vrf_ref][bd_ref]:
-###                        for subnet_chk in subnets_consistency[tenant_ref][vrf_ref][bd_chk]:
-###                            ipnet_ref = ipaddress.ip_interface(unicode(subnet_ref)).network
-###                            ipnet_chk = ipaddress.ip_interface(unicode(subnet_chk)).network
-###                            if ipnet_ref.overlaps(ipnet_chk):
-###                                print "Tenant["+tenant_ref+"], VRF ["+vrf_ref+"]: ["+bd_ref+"]/["+subnet_ref+"] overlaps with ["+bd_chk+"]/["+subnet_chk+"]"
-###                                fh.write("Tenant ["+tenant_ref+"], VRF ["+vrf_ref+"]: ["+bd_ref+"]/["+subnet_ref+"] overlaps with ["+bd_chk+"]/["+subnet_chk+"]\n")
-fh.close()
-# end of consistency check
-
-print "#########################################################################################################################"
-print "#########################################################################################################################"
 
 print "Create Excel\n"
 create_excel(excel_file, tenants)
 
-print "#########################################################################################################################"
 print "#########################################################################################################################"
 # end of main program

@@ -1,0 +1,135 @@
+# network-automation2
+Repository for network automation webinar
+
+Summary report for network automation webinar
+=============================================
+
+Usage:
+======
+File structure:
+<your-path>/
+    logical-topology/
+        bin-logical-topology/                   Directory for playbooks and template, version control for this branch is recommended
+        	logical-topology-cli.py			    Python script with a kind of CLI menu structure to explore JSON data created by the converter script
+        	logical-topology-consistency.py     Python script to perfrom a consistency check based on the JSON data created by the converter script
+        	logical-topology-converter.py       Python script to parse the output from the playbook and create a customized JSON file and excel sheet
+        	pb-logical-topology.yml             Ansible playbook to pull data from the ACI fabric
+            var-files/                          Directory containing definitions for consistency checks, one file per ACI
+    		    vars-consistency-group-1.yml    Example file for group-1
+            
+        data-logical-topology/                  Directory for runtime data, version control is not important
+            output-files/                       Directory containing files created by ansible playbooks
+    		    group-1/						Directory to contain runtime data for 1 ACI environment
+    
+        README                                  This file
+        .vars-aci-credentials.yml               Template for ACI credentials file
+        aci-inventory                           Template for ansible inventory
+
+Day-0 preparation:
+Copy the file .vars-aci-credentials.yml into your homedirectoy and fill in user and password. These data will be used in the Ansible playbook to log into the APIC. If you have different APICs the same data will be used for every APIC.
+Create your Ansible inventory file. If you have more than 1 ACI fabric you can define different groups, each containing 1 APIC. The playbook will process all APICs in parallel and store the output files in directories that will use your group name. Make sure to use group names that can be used as directory names.
+Create var-files with your consistency check definitions for every environment that you want to perform consistency checks on. For more details see the template file.
+Add your Ansible inventory groups to the logical-topology-consistency.py, in the list "valid_envs"
+
+Day-to-Day
+- Run Ansible playbook to pull data from APICs
+cd <your-path>/logical-topology/bin-logical-topology/
+ansible-playbook -i <your-inventory-file> pb-logical-topology.yml
+
+- Run converter script for every environment, here is an example for an environment called "group-1"
+./logical-topology-converter.py -e group-1
+
+- Run the consistency check script for every environment, , here is an example for an environment called "group-1"
+./logical-topology-consistency.py - e group-1
+
+Use case:
+=========
+The inventory/logical topology is used to get an simple overview of configured tenants including VRFs, Bridge Domains (BDs), Application Profiles (APs) and endpoint gropus (EPGs).
+Additionally this can be used to check settings within BDs and EPGs and check for compliance with recommended and standard values.
+
+Define the problem:
+The APIC GUI can difficult to get a quick overview for certain configuration parameters because these values are hidden in different subtrees of the GUI.
+For example, if you want to check if all Bridge Domains have a certain parameter set this can be really complicated.
+A list containing only those parameters you're interested in would be a great help.
+
+How to get information from the network device:
+The Ansible APIC modules can be used to query the APIC for certain objects and return a JSON structure.
+Following modules are used:
+aci_tenant: Returns a list of tenants
+aci_vrf:    Returns a list of VRF. Contains a reference to the tenant
+aci_bd:     Returns a list of Bridge Domains with some child objects. Unfortunately the list of subnets is not contained. To get this information the filter string in the aci_bd module can be adjusted
+            Contains also a reference to the tenant and vrf
+aci_ap:     Returns a list of application profiles, containing a reference to the tenant    
+aci_epg:    Returns a list of Endpoint Groups with some child object. Unfortunately a list of subnets and static ports is not included. To get this information the filter string in the aci_epg module can be adjusted
+            Contains also a reference to the tenant and application profile.
+
+These modules support the state "query" that returns information from the APIC in a JSON data structure. 
+Unfortunately the output is not presented in the desired structure described in the next paragraph and must be parsed and reorganized.
+As the processing of complicated data structures can be quite difficult in Ansible this is done in a python script.
+
+           
+            
+Define the report format:
+The report will be compiled in an excel sheet. Most people are familiar with Excel and sorting and filtering mechanisms.
+In that way they can easily get the information they're looking for from the report.
+As a basic structure for data should be organized in the same hierarchical form as it is implemented in the ACI.
+In general every object in APIC has some attributes ,e.g. a description, and can have other objects as a child or a reference.
+A tenant is the object at the top and has VRFs and APs as child objects. The graphic below is not a complete overview of the ACI objects and there relations, but shows the objects relevant to this report.
+
+                                        Tenant --> Attributes
+                                       /      \
+                                      /        \
+                     Attributes <-- VRF         AP --> Attributes
+                                    /            \
+                                   /              \
+                   Attributes <-- BD <----------- EPG --> Attributes 
+                                  |              / | \
+                                  |             /  |  \
+                                Subnets        /   |   \
+                                              /    |    \
+                                      Contracts    |     Static Ports --> Attributes
+                                                   |
+                                                Subnets
+                                                
+Not all attributes of an object are listed in the report. If an attribute is missing the python script can be changed to include this attribute.
+
+                                                
+The excel report will be split in two datasheets, one for the VRF branch and one for the AP branch.
+A python script picks up the JSON data written by the ansible playbook and creates this data structure.
+Finally the report is written to an excel workbook and dumped in a JSON file for further processing.
+
+Consistency checks:
+Based on the data structure compiled in the python script some consistency checks can be performed.
+
+Static ports and port_groups:
+To connect devices to a specific EPG the relevant ports are defined as static ports under and EPG. In this configuration you can define whether to use a VLAN in trunk or access mode, or a Vxlan.
+Sometimes it is necessary that a group of ports is connected to an EPG, e.g. for a firewall cluster both cluster nodes must be attached.
+If one node is missing traffic is forwarded through the connected firewall node but if this node fails there is no way to switch over to the other node.
+That means that the problem can be masked and only comes up in case of a cluster failover. 
+It would be great to catch this misconfiguration earlier and fix it before an outage happens.
+
+For the check you can define so-called port_groups, a list of ports that belong to one cluster.
+The script compares every port_group against the list of ports connected to an EPG.
+If none of the ports from the port_group is present in the EPG everything is okay. Apparently this specific port_group is not used within the EPG.
+If all ports from the port_group are present in the EPG everything is okay. The port_group is used in the EPG and configured correctly.
+If some ports from the port_group are present in the EPG a message is raised. Apparently the port_group is used in this EPG, but some ports are missing.
+
+Subnet overlap (in BDs):
+Subnets can be defined in BDs and EPGs. For example if you connect a couple of servers to the ACI infrastructure and you want ACI to be the default gateway for these servers you could add a subnet to the BD.
+Servers connected to EPGs within this BD can use that ip address as a default gateway.
+That is (roughly) comparable to configure a SVI on an IOS device. The SVI ip address can act as default gateway for all devices connected to that VLAN.
+If you try to configure overlapping ip networks on different SVIs you will get an error message when configuring the second SVI.
+In this example the ip network on interface vlan 20 is a subnet of the network in interface vlan 10 and you will get an error message when you try to configure this.
+interface vlan 10
+  ip address 10.10.10.1/24
+interface vlan 20
+  ip address 10.10.10.193/26
+  
+On ACI you will not get an error message right away when pushing the configuration. Instead the configuration is accepted and a system fault is raised. The configuration for the second subnet is not pushed to the leafs.
+If you do not notice the system fault you end up with the second subnet not working correctly.
+This consistency checks compares the subnets in BDs connected to the same VRF and raises a message if overlapping subnets are found.
+
+Consumed contracts:
+This consistency check is helpful if you have a setup where all EPG in a specific AP need the same consumed contract.
+For example a couple of webservers in different EPGs that all connect to the same DB servers.
+You can define the name of the consumed contract per AP and the script checks if every EPG within this AP is configured with the contract.

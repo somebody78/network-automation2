@@ -14,6 +14,7 @@ import readline
 import os
 import sys
 import re
+import argparse
 
 ######################################
 # Classes
@@ -463,8 +464,6 @@ def exit():
 # Variables
 ######################################
 #
-json_file = "/data/ansible/aci-logical-topology/mpdc/data/json-mpdc.txt"
-#
 # Menu definition
 menu_actions = {
     't': menu_tenant,
@@ -496,17 +495,28 @@ session_vars = {
 }
 
 choice = ''
+valid_envs = ['medc','mpdc']
+env = ''
+script_dir = sys.path[0] + "/"
+
 #
 ######################################
 # Main program
 ######################################
 #
+# define argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("-e", "--env", type=str, choices=valid_envs, required=True, help="Choose the environment")
+args = parser.parse_args()
+env = args.env
+
+json_file = script_dir+"../data-logical-topology/output-files/"+env+"/json-"+env+".json"
+#
+
 # open JSON file and read content
 jf = open(json_file, 'r')
 acitop = json.load(jf)
 jf.close()
-
-# pdb.set_trace()
 
 while True:
     os.system('clear')

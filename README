@@ -4,6 +4,8 @@ Repository for network automation webinar
 Summary report for network automation webinar
 =============================================
 
+These playbooks and scripts are designed for Ansible 2.4. For a version compatible with Ansible 2.7 and added functionality check out the repository <aci-logical-topology-2.7>
+
 Usage:
 ======
 File structure:
